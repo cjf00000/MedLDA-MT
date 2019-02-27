@@ -7,7 +7,7 @@
 
 #set(LINK_LIBS ldalibs gflags)
 
-add_executable(svm svm_main.cpp)
+add_executable(svm svm_main.cpp svm.cpp)
 target_link_libraries(svm gflags)
 
 #add_executable(lda main.cpp)
