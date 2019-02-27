@@ -62,6 +62,8 @@ Corpus::Corpus(const std::string &data_file) {
     cout << "Read " << num_train << " training docs, " << train_T << " tokens.\n"
          << "Read " << num_test << " testing docs, " << test_T << " tokens.\n"
          << "Vocabulary size is " << V << endl;
+
+    num_data = num_train + num_test;
 }
 
 void Corpus::SaveArray(const std::string &data_file) {

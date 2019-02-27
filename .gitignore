@@ -4,3 +4,4 @@ release
 .idea
 *liblinear*
 cmake-build-debug
+data

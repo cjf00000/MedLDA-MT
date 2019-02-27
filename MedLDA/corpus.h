@@ -28,7 +28,7 @@ public:
     void Save(const std::string &data_file);
     bool Load(const std::string &data_file);
 
-    int num_train, num_test, V;
+    int num_train, num_test, num_data, V;
     size_t train_T, test_T;
 };
 
