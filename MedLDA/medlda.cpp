@@ -2,7 +2,7 @@
 // Created by Jianfei on 2019/2/27.
 //
 
-#include "MedLDA.h"
+#include "medlda.h"
 #include <iostream>
 using namespace std;
 

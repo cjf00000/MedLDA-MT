@@ -8,8 +8,8 @@
 #include <iostream>
 using namespace std;
 
-SVM::SVM(int num_data, int num_features, double C, double eps)
-        : num_data(num_data), num_features(num_features), C(C), eps(eps),
+SVM::SVM(int num_data, int num_features, double C, double ell, double eps)
+        : num_data(num_data), num_features(num_features), C(C), ell(ell), eps(eps),
         diag(num_data), w(num_features), alpha(num_data), perm(num_data)
 {
     iota(perm.begin(), perm.end(), 0);
@@ -49,7 +49,7 @@ void SVM::Solve() {
             double grad = 0;
             for (auto &e: X[i])
                 grad += w[e.k] * e.v;
-            grad = grad * y[i] - 1;
+            grad = grad * y[i] - ell;
 
             double pg = grad;
             if (alpha[i] < eps) pg = min(pg, 0.);
@@ -68,7 +68,7 @@ void SVM::Solve() {
         double obj = 0;
         for (auto wi: w) obj += wi * wi;
         obj *= 0.5;
-        for (auto ai: alpha) obj -= ai;
+        for (auto ai: alpha) obj -= ell * ai;
 
         cout << "Iter " << iter << " Objective function " << obj << endl;
 

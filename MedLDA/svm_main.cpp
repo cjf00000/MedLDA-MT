@@ -11,6 +11,7 @@ DEFINE_string(train_data, "../data/nips", "Prefix of the dataset");
 DEFINE_string(test_data, "../data/nips", "Prefix of the dataset");
 DEFINE_double(C, 1.0, "C");
 DEFINE_double(ell, 1.0, "Margin");
+DEFINE_double(eps, 0.1, "Tolerance");
 
 struct SVMData {
     SVMData(string path) {
@@ -44,7 +45,7 @@ int main(int argc, char **argv) {
     SVMData test(FLAGS_test_data);
     cout << "Read " << train.X.size() << " instances, " << train.num_features << " features." << endl;
     cout << "Read " << test.X.size() << " instances, " << test.num_features << " features." << endl;
-    SVM model(train.X.size(), train.num_features, FLAGS_C);
+    SVM model(train.X.size(), train.num_features, FLAGS_C, FLAGS_ell, FLAGS_eps);
     model.SetData(train.X, train.Y);
     model.Solve();
     cout << model.nSV() << " SVs." << endl;

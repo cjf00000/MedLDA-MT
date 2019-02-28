@@ -17,7 +17,7 @@ typedef std::vector<Entry> Feature;
 
 class SVM {
 public:
-    SVM(int num_data, int num_features, double C, double eps = 1e-7);
+    SVM(int num_data, int num_features, double C, double ell, double eps = 1e-7);
 
     void SetData(std::vector<Feature> &X, std::vector<int> &y, bool move = false);
 
@@ -37,7 +37,7 @@ private:
     std::vector<double> alpha;
     std::vector<int> perm;
     int num_features, num_data;
-    double C;
+    double C, ell;
     double eps;
     std::mt19937 generator;
 };
