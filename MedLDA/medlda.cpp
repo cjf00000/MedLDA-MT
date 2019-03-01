@@ -115,9 +115,11 @@ double MedLDA::SolveSVM()
         X.push_back(move(doc));
     }
     vector<vector<double>> pred;
+    nSV = 0;
     for (int c = 0; c < corpus.num_classes; c++) {
         svm[c].Solve(X, corpus.ys[c]);
         pred.push_back(move(svm[c].Predict(X)));
+        nSV += svm[c].nSV();
     }
     return corpus.Accuracy(pred);
 }
@@ -134,6 +136,7 @@ void MedLDA::Train()
         double perplexity = Perplexity();
         cout << "Iteration " << iter
              << " perplexity " << perplexity
+             << " nSV " << nSV
              << " training accuracy " << acc << endl;
 
         if (iter % 10 == 0)

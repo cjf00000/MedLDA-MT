@@ -26,7 +26,7 @@ public:
 private:
     Corpus &corpus, &testCorpus;
     std::vector<SVM> svm;
-    int K;
+    int K, nSV;
     float alpha, beta, C, ell;
     std::vector<int> cdk, cwk, ck;
     std::vector<float> phi, inv_ck;
