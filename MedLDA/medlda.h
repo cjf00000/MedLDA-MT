@@ -16,9 +16,11 @@ public:
 
     void ComputePhi();
     void SampleDoc(int d);
+    void SampleTestDoc(int d);
     double SolveSVM();
 
     void Train();
+    void Test();
     double Perplexity();
 
 private:
@@ -29,6 +31,9 @@ private:
     std::vector<int> cdk, cwk, ck;
     std::vector<float> phi, inv_ck;
     std::vector<float> prob;
+
+    std::vector<float> test_cdk;
+
     std::mt19937 generator;
     std::uniform_real_distribution<float> u01;
 };
