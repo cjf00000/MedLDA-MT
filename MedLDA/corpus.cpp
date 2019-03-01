@@ -14,63 +14,76 @@ bool is_file_exist(const char *fileName)
     return infile.good();
 }
 
-Corpus::Corpus(const std::string &data_file) {
+Corpus::Corpus(const std::string &data_file, Corpus *trainCorpus, bool multi_label)
+    : multi_label(multi_label)
+{
+    if (trainCorpus) {
+        word_to_id = trainCorpus->word_to_id;
+        vocab = trainCorpus->vocab;
+        V = trainCorpus->V;
+        num_classes = trainCorpus->num_classes;
+    }
     if (!Load(data_file)) {
-        train_T = 0;
-        test_T = 0;
-        num_train = 0;
-        num_test = 0;
-        V = 0;
+        T = 0;
+        num_docs = 0;
+        if (!trainCorpus) V = 0;
 
-        auto ReadCorpus = [&](string path, bool is_train, int &num_docs, size_t &T) {
-            ifstream f_data(path.c_str());
-            std::string line;
-            while (getline(f_data, line)) {
-                std::vector<Token> doc;
-                for (auto &c: line)
-                    if (c == ':')
-                        c = ' ';
+        ifstream f_data(data_file.c_str());
+        std::string line;
+        while (getline(f_data, line)) {
+            std::vector<Token> doc;
+            for (auto &c: line)
+                if (c == ':')
+                    c = ' ';
 
-                int label, cnt;
-                string word;
-                istringstream sin(line);
-                sin >> label;
-                y.push_back(label);
-                while (sin >> word >> cnt) {
-                    int id;
-                    if (word_to_id.find(word) == word_to_id.end()) {
-                        if (is_train) {
-                            id = word_to_id[word] = V++;
-                            vocab.push_back(word);
-                        } else
-                            continue;
+            int label, cnt;
+            string word;
+            istringstream sin(line);
+            sin >> label;
+            y.push_back(label);
+            while (sin >> word >> cnt) {
+                int id;
+                if (word_to_id.find(word) == word_to_id.end()) {
+                    if (!trainCorpus) {
+                        id = word_to_id[word] = V++;
+                        vocab.push_back(word);
                     } else
-                        id = word_to_id[word];
-
-                    while (cnt--) doc.push_back(Token{id, 0});
+                        continue;
                 }
-                T += doc.size();
-                num_docs++;
-                w.push_back(move(doc));
+                id = word_to_id[word];
+
+                while (cnt--) doc.push_back(Token{id, 0});
             }
-        };
-        ReadCorpus(data_file + ".train", true, num_train, train_T);
-        ReadCorpus(data_file + ".test", false, num_test, test_T);
+            T += doc.size();
+            num_docs++;
+            w.push_back(move(doc));
+        }
         Save(data_file);
     }
 
-    cout << "Read " << num_train << " training docs, " << train_T << " tokens.\n"
-         << "Read " << num_test << " testing docs, " << test_T << " tokens.\n"
+    cout << "Read " << num_docs << " docs, " << T << " tokens.\n"
          << "Vocabulary size is " << V << endl;
 
-    num_data = num_train + num_test;
+    if (!trainCorpus) {
+        num_classes = 0;
+        for (auto c: y)
+            num_classes = max(c+1, num_classes);
+    }
+
+    ys.resize(num_classes);
+    for (int i = 0; i < num_docs; i++) {
+        for (int c = 0; c < num_classes; c++)
+            if (c == y[i])
+                ys[c].push_back(1);
+            else
+                ys[c].push_back(-1);
+    }
 }
 
 void Corpus::SaveArray(const std::string &data_file) {
     ofstream fout(data_file, ios::binary);
     std::vector<int> sizes;
-    sizes.push_back(num_train);
-    sizes.push_back(num_test);
+    sizes.push_back(num_docs);
     for (auto &a: w) sizes.push_back(a.size());
     fout.write((char*)sizes.data(), sizes.size()*sizeof(int));
     fout.write((char*)y.data(), y.size()*sizeof(int));
@@ -82,15 +95,13 @@ void Corpus::SaveArray(const std::string &data_file) {
 void Corpus::LoadArray(const std::string &data_file) {
     ifstream fin(data_file, ios::binary);
     std::vector<int> sizes;
-    fin.read((char*)&num_train, sizeof(int));
-    fin.read((char*)&num_test, sizeof(int));
-    int N = num_train + num_test;
-    sizes.resize(N);
-    fin.read((char*)sizes.data(), N*sizeof(int));
-    y.resize(N);
-    fin.read((char*)y.data(), N*sizeof(int));
-    w.resize(N);
-    for (int i = 0; i < N; i++)
+    fin.read((char*)&num_docs, sizeof(int));
+    sizes.resize(num_docs);
+    fin.read((char*)sizes.data(), num_docs*sizeof(int));
+    y.resize(num_docs);
+    fin.read((char*)y.data(), num_docs*sizeof(int));
+    w.resize(num_docs);
+    for (int i = 0; i < num_docs; i++)
         w[i].resize(sizes[i]);
     for (auto &a: w)
         fin.read((char*)a.data(), a.size()*sizeof(Token));
@@ -112,12 +123,9 @@ bool Corpus::Load(const std::string &data_file) {
     }
 
     LoadArray(bin_file);
-
-    train_T = test_T = 0;
-    for (int i = 0; i < num_train; i++)
-        train_T += w[i].size();
-    for (int i = num_train; i < num_train + num_test; i++)
-        test_T += w[i].size();
+    T = 0;
+    for (auto &doc: w)
+        T += doc.size();
     return true;
 }
 
@@ -129,4 +137,17 @@ void Corpus::Save(const std::string &data_file) {
     ofstream f_vocab(vocab_file);
     for (auto &word: vocab)
         f_vocab << word << "\n";
+}
+
+double Corpus::Accuracy(std::vector<std::vector<double>> &pred) {
+    int num_correct = 0;
+    for (int i = 0; i < num_docs; i++) {
+        int max_pred = 0;
+        for (int c = 1; c < num_classes; c++)
+            if (pred[c][i] > pred[max_pred][i])
+                max_pred = c;
+         if (max_pred == y[i])
+             num_correct++;
+    }
+    return (double)num_correct / num_docs;
 }

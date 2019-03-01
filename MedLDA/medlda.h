@@ -6,25 +6,24 @@
 #define MEDLDA_MEDLDA_H
 
 #include "corpus.h"
+#include "svm.h"
 #include <vector>
 #include <random>
 
 class MedLDA {
 public:
-    MedLDA(Corpus &corpus, int K, float alpha, float beta, float C, float ell);
+    MedLDA(Corpus &corpus, Corpus &testCorpus, int K, float alpha, float beta, float C, float ell, float eps);
 
     void ComputePhi();
-
-    bool isTrain(int d);
-
     void SampleDoc(int d);
+    double SolveSVM();
 
     void Train();
-
     double Perplexity();
 
 private:
-    Corpus& corpus;
+    Corpus &corpus, &testCorpus;
+    std::vector<SVM> svm;
     int K;
     float alpha, beta, C, ell;
     std::vector<int> cdk, cwk, ck;

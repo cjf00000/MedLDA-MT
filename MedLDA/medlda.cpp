@@ -3,22 +3,26 @@
 //
 
 #include "medlda.h"
+#include "utils.h"
 #include <iostream>
 using namespace std;
 
-MedLDA::MedLDA(Corpus &corpus, int K, float alpha, float beta, float C, float ell)
-    : corpus(corpus), K(K), alpha(alpha), beta(beta), C(C), ell(ell),
-      cdk(corpus.num_data * K), cwk(corpus.V * K), ck(K),
+MedLDA::MedLDA(Corpus &corpus, Corpus &testCorpus,
+               int K, float alpha, float beta, float C, float ell, float eps)
+    : corpus(corpus), testCorpus(testCorpus),
+      K(K), alpha(alpha), beta(beta), C(C), ell(ell),
+      cdk(corpus.num_docs * K), cwk(corpus.V * K), ck(K),
       phi(corpus.V * K), inv_ck(K), prob(K)
 {
-    for (int d = 0; d < corpus.num_data; d++) {
+    for (int c = 0; c < corpus.num_classes; c++)
+        svm.push_back(SVM(corpus.num_docs, K, 2 * C, ell, eps));
+
+    for (int d = 0; d < corpus.num_docs; d++) {
         for (auto &token: corpus.w[d]) {
             token.z = generator() % K;
             cdk[d * K + token.z]++;
-            if (isTrain(d)) {
-                cwk[token.w * K + token.z]++;
-                ck[token.z]++;
-            }
+            cwk[token.w * K + token.z]++;
+            ck[token.z]++;
         }
     }
     ComputePhi();
@@ -35,14 +39,15 @@ void MedLDA::ComputePhi()
             phi[v * K + k] = (cwk[v * K + k] + beta) * inv_ck[k];
 }
 
-bool MedLDA::isTrain(int d)
-{
-    return d < corpus.num_train;
-}
-
 void MedLDA::SampleDoc(int d)
 {
     auto *cd = cdk.data() + d * K;
+    std::vector<double> doc_prob(K);
+    for (int c = 0; c < corpus.num_classes; c++)
+        for (int k = 0; k < K; k++)
+            doc_prob[k] += svm[c].w[k] * svm[c].alpha[d] * corpus.ys[c][d];
+    Softmax(doc_prob);
+
     for (auto &token: corpus.w[d]) {
         auto *cw = cwk.data() + token.w * K;
         --cd[token.z];
@@ -52,7 +57,7 @@ void MedLDA::SampleDoc(int d)
 
         float sum = 0;
         for (int k = 0; k < K; k++)
-            prob[k] = sum += (cd[k] + alpha) * (cw[k] + beta) * inv_ck[k];
+            prob[k] = sum += (cd[k] + alpha) * (cw[k] + beta) * inv_ck[k] * doc_prob[k];
 
         float pos = sum * u01(generator);
         int k = 0;
@@ -66,15 +71,37 @@ void MedLDA::SampleDoc(int d)
     }
 }
 
+double MedLDA::SolveSVM()
+{
+    std::vector<Feature> X;
+    for (int d = 0; d < corpus.num_docs; d++) {
+        Feature doc;
+        for (int k = 0; k < K; k++)
+            if (cdk[d * K + k])
+                doc.push_back(Entry{k, (float)cdk[d * K + k] / corpus.w[d].size()});
+        X.push_back(move(doc));
+    }
+    vector<vector<double>> pred;
+    for (int c = 0; c < corpus.num_classes; c++) {
+        svm[c].Solve(X, corpus.ys[c]);
+        pred.push_back(move(svm[c].Predict(X)));
+    }
+    return corpus.Accuracy(pred);
+}
+
 void MedLDA::Train()
 {
     for (int iter = 0; iter < 100; iter++) {
-        for (int d = 0; d < corpus.num_train; d++)
+        double acc = SolveSVM();
+
+        for (int d = 0; d < corpus.num_docs; d++)
             SampleDoc(d);
 
         ComputePhi();
         double perplexity = Perplexity();
-        cout << "Iteration " << iter << " perplexity " << perplexity << endl;
+        cout << "Iteration " << iter
+             << " perplexity " << perplexity
+             << " training accuracy " << acc << endl;
     }
 }
 
@@ -82,7 +109,7 @@ double MedLDA::Perplexity()
 {
     std::vector<float> theta(K);
     double log_likelihood = 0;
-    for (int d = 0; d < corpus.num_train; d++) {
+    for (int d = 0; d < corpus.num_docs; d++) {
         for (int k = 0; k < K; k++)
             theta[k] = (cdk[d * K + k] + alpha) / (corpus.w[d].size() + alpha * K);
         for (auto &token: corpus.w[d]) {
@@ -93,5 +120,5 @@ double MedLDA::Perplexity()
             log_likelihood += log(l);
         }
     }
-    return exp(-log_likelihood / corpus.train_T);
+    return exp(-log_likelihood / corpus.T);
 }

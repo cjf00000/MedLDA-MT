@@ -16,10 +16,11 @@ struct Token {
 
 class Corpus {
 public:
-    Corpus(const std::string &path);
+    Corpus(const std::string &path, Corpus *trainCorpus = nullptr, bool multi_label = false);
 
-    std::vector<std::vector<Token> > w;
+    std::vector<std::vector<Token>> w;
     std::vector<int> y;
+    std::vector<std::vector<int>> ys;
     std::vector<std::string> vocab;
     std::map<std::string, int> word_to_id;
 
@@ -27,9 +28,11 @@ public:
     void LoadArray(const std::string &data_file);
     void Save(const std::string &data_file);
     bool Load(const std::string &data_file);
+    double Accuracy(std::vector<std::vector<double>> &pred);
 
-    int num_train, num_test, num_data, V;
-    size_t train_T, test_T;
+    bool multi_label;
+    int num_docs, V, num_classes;
+    size_t T;
 };
 
 #endif //MEDLDA_CORPUS_H

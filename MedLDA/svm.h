@@ -17,24 +17,22 @@ typedef std::vector<Entry> Feature;
 
 class SVM {
 public:
+    SVM() {}
     SVM(int num_data, int num_features, double C, double ell, double eps = 1e-7);
-
-    void SetData(std::vector<Feature> &X, std::vector<int> &y, bool move = false);
 
     // Input: X, y, initial alpha, w
     // Output: alpha, w
-    void Solve();
+    void Solve(std::vector<Feature> &X, std::vector<int> &y);
 
     int nSV();
 
-    double Score(std::vector<Feature> &X, std::vector<int> &y);
+    std::vector<double> Predict(std::vector<Feature> &X);
+
+    std::vector<double> alpha;
+    std::vector<double> w;
 
 private:
-    std::vector<Feature> X;
-    std::vector<int> y;
     std::vector<double> diag;
-    std::vector<double> w;
-    std::vector<double> alpha;
     std::vector<int> perm;
     int num_features, num_data;
     double C, ell;

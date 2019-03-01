@@ -4,51 +4,56 @@
 #include <fstream>
 #include <string>
 #include <sstream>
+#include <algorithm>
 #include "svm.h"
+#include "corpus.h"
 using namespace std;
 
-DEFINE_string(train_data, "../data/nips", "Prefix of the dataset");
-DEFINE_string(test_data, "../data/nips", "Prefix of the dataset");
+DEFINE_string(data, "../data/20news", "Prefix of the dataset");
 DEFINE_double(C, 1.0, "C");
 DEFINE_double(ell, 1.0, "Margin");
 DEFINE_double(eps, 0.1, "Tolerance");
 
-struct SVMData {
-    SVMData(string path) {
-        ifstream fin(path);
-        string line;
-        num_features = 0;
-        while (getline(fin, line)) {
-            for (char &ch: line) if (ch == ':') ch = ' ';
-            int y, k; float v;
-            istringstream sin(line);
-            sin >> y;
-            Feature feature;
-            while (sin >> k >> v) {
-                num_features = max(num_features, k);
-                feature.push_back(Entry{k-1, v});
-            }
-            X.push_back(std::move(feature));
-            Y.push_back(y);
-        }
-    }
-
-    std::vector<Feature> X;
-    std::vector<int> Y;
-    int num_features;
-};
-
 int main(int argc, char **argv) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
-    SVMData train(FLAGS_train_data);
-    SVMData test(FLAGS_test_data);
-    cout << "Read " << train.X.size() << " instances, " << train.num_features << " features." << endl;
-    cout << "Read " << test.X.size() << " instances, " << test.num_features << " features." << endl;
-    SVM model(train.X.size(), train.num_features, FLAGS_C, FLAGS_ell, FLAGS_eps);
-    model.SetData(train.X, train.Y);
-    model.Solve();
-    cout << model.nSV() << " SVs." << endl;
-    cout << "Training accuracy " << model.Score(train.X, train.Y)
-         << " Testing accuracy " << model.Score(test.X, test.Y) << endl;
+    Corpus train(FLAGS_data + ".train");
+    Corpus test(FLAGS_data + ".test", &train);
+    cout << "Read " << train.num_docs << " instances, "
+         << train.V << " features "
+         << train.num_classes << " classes" << endl;
+    cout << "Read " << test.num_docs << " instances, "
+         << test.V << " features "
+         << test.num_classes << " classes" << endl;
+
+    auto ConvertX = [&](Corpus &corpus, vector<Feature> &X) {
+        Feature feature;
+        for (auto &doc: corpus.w) {
+            feature.clear();
+            sort(doc.begin(), doc.end(), [](Token &a, Token &b) { return a.w < b.w; });
+            int N = (int)doc.size();
+            int j = 0;
+            for (int i = 0; i < N; i = j) {
+                for (j = i; j < N && doc[i].w == doc[j].w; j++);
+                feature.push_back(Entry{doc[i].w, (float)(j - i)});
+            }
+            X.push_back(feature);
+        }
+    };
+    vector<Feature> train_X, test_X;
+    ConvertX(train, train_X);
+    ConvertX(test, test_X);
+
+    vector<SVM> models;
+    vector<vector<double>> train_p, test_p;
+    for (int c = 0; c < train.num_classes; c++) {
+        models.push_back(SVM(train.num_docs, train.V, FLAGS_C, FLAGS_ell, FLAGS_eps));
+        models.back().Solve(train_X, train.ys[c]);
+        cout << models.back().nSV() << " SVs." << endl;
+        train_p.push_back(models.back().Predict(train_X));
+        test_p.push_back(models.back().Predict(test_X));
+    }
+
+    cout << "Training accuracy " << train.Accuracy(train_p)
+         << " Testing accuracy " << test.Accuracy(test_p) << endl;
 }

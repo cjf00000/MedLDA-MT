@@ -15,16 +15,7 @@ SVM::SVM(int num_data, int num_features, double C, double ell, double eps)
     iota(perm.begin(), perm.end(), 0);
 }
 
-void SVM::SetData(std::vector<Feature> &Xa, std::vector<int> &ya, bool move)
-{
-    if (move) {
-        X = std::move(Xa);
-        y = std::move(ya);
-    } else{
-        X = Xa;
-        y = ya;
-    }
-
+void SVM::Solve(std::vector<Feature> &X, std::vector<int> &y) {
     diag.clear(); // diag[i] = <x[i], x[i]>
     for (auto &x: X) {
         double sum = 0;
@@ -36,9 +27,7 @@ void SVM::SetData(std::vector<Feature> &Xa, std::vector<int> &ya, bool move)
     for (int i = 0; i < num_data; i++)
         for (auto &e: X[i])
             w[e.k] += y[i] * alpha[i] * e.v;
-}
 
-void SVM::Solve() {
     double old_obj = 1e9;
     int iter = 0;
     while (1) {
@@ -70,7 +59,7 @@ void SVM::Solve() {
         obj *= 0.5;
         for (auto ai: alpha) obj -= ell * ai;
 
-        cout << "Iter " << iter << " Objective function " << obj << endl;
+//        cout << "Iter " << iter << " Objective function " << obj << endl;
 
         if (fabs(old_obj - obj) < eps)
             break;
@@ -87,13 +76,13 @@ int SVM::nSV() {
     return cnt;
 }
 
-double SVM::Score(std::vector<Feature> &X, std::vector<int> &y) {
+std::vector<double> SVM::Predict(std::vector<Feature> &X) {
+    std::vector<double> result(X.size());
     int num_data = X.size();
-    double num_correct = 0;
     for (int i = 0; i < num_data; i++) {
         double p = 0;
         for (auto &e: X[i]) p += w[e.k] * e.v;
-        if ((p>0) == (y[i]==1)) num_correct++;
+        result[i] = p;
     }
-    return num_correct / num_data;
+    return move(result);
 }
