@@ -9,6 +9,7 @@
 using namespace std;
 
 DEFINE_bool(fast, false, "Fast sampling of topic assignment");
+DEFINE_double(epsilon, 0.01, "Lower bound of doc prob");
 
 MedLDA::MedLDA(Corpus &corpus, Corpus &testCorpus,
                int K, float alpha, float beta, float C, float ell, float eps)
@@ -16,6 +17,7 @@ MedLDA::MedLDA(Corpus &corpus, Corpus &testCorpus,
       K(K), alpha(alpha), beta(beta), C(C), ell(ell),
       cdk(corpus.num_docs * K), cwk(corpus.V * K), ck(K),
       phi(corpus.V * K), inv_ck(K), prob(K), doc_prob(corpus.num_docs * K),
+      doc_prob_hat(corpus.num_docs * K),
       test_cdk(testCorpus.num_docs * K)
 {
     for (int c = 0; c < corpus.num_classes; c++)
@@ -67,6 +69,11 @@ void MedLDA::ComputeDocProb()
             for (int k = 0; k < K; k++)
                 dp[k] += svm[c].w[k] * svm[c].alpha[d] * corpus.ys[c][d];
         Softmax(dp, K);
+
+        // Sparsify
+        auto *dph = doc_prob_hat.data() + d * K;
+        for (int k = 0; k < K; k++)
+            dph[k] = max(dp[k] - FLAGS_epsilon, 0.0);
     }
     classTime += clk.toc();
 }
@@ -107,18 +114,52 @@ void MedLDA::SampleWord(int w)
     corpus.ForWord(w, [&](int d, int &z) {
         auto *cd = cdk.data() + d * K;
         auto *dp = doc_prob.data() + d * K;
+        auto *dph = doc_prob_hat.data() + d * K;
         --cd[z];
         --cw[z];
         --ck[z];
         inv_ck[z] = 1.0 / (ck[z] + beta * corpus.V);
 
-        float sum = 0;
-        for (int k = 0; k < K; k++)
-            prob[k] = sum += (cd[k] + alpha) * (cw[k] + beta) * inv_ck[k] * dp[k];
+        int k;
+        while (1) {
+            float sum_1 = 0;
+            float sum_2 = 0;
+            float sum_3 = 0;
+            for (int k = 0; k < K; k++) {
+                float phi = (cw[k] + beta) * inv_ck[k];
+                sum_1 += cd[k] * phi * dp[k];
+                sum_2 += alpha * phi * dph[k];
+                sum_3 += alpha * phi * FLAGS_epsilon;
+            }
+            float pos = (sum_1 + sum_2 + sum_3) * u01(generator);
+            k = 0;
+            if (pos < sum_1) {
+                float sum = 0;
+                for (int k = 0; k < K; k++)
+                    prob[k] = sum += cd[k] * (cw[k] + beta) * inv_ck[k] * dp[k];
+                while (k + 1 < K && pos > prob[k]) k++;
+                break;
+            } else if (pos < sum_1 + sum_2) {
+                pos -= sum_1;
+                float sum = 0;
+                for (int k = 0; k < K; k++)
+                    prob[k] = sum += alpha * (cw[k] + beta) * inv_ck[k] * dp[k];
+                while (k + 1 < K && pos > prob[k]) k++;
+                break;
+            } else {
+                pos -= sum_1 + sum_2;
+                float sum = 0;
+                for (int k = 0; k < K; k++)
+                    prob[k] = sum += alpha * (cw[k] + beta) * inv_ck[k] * FLAGS_epsilon;
+                while (k + 1 < K && pos > prob[k]) k++;
 
-        float pos = sum * u01(generator);
-        int k = 0;
-        while (k + 1 < K && pos > prob[k]) k++;
+                float gap = dp[k] - dph[k];
+                if (u01(generator) * FLAGS_epsilon >= gap)
+                    num_reject++;
+                else
+                    break;
+            }
+        }
         z = k;
 
         ++cd[z];

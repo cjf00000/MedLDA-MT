@@ -95,6 +95,7 @@ void Corpus::AllocZDoc(int K) {
 }
 
 void Corpus::AllocZWord(int K) {
+    dz.resize(d.size());
     for (int w = 0; w < V; w++) {
         dz[w].resize(d[w].size());
         for (auto &k: dz[w])
