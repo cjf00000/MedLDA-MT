@@ -6,12 +6,12 @@
 #include "utils.h"
 using namespace std;
 
-void Softmax(std::vector<double> &p)
+void Softmax(float *a, int N)
 {
-    double max_p = -1e9;
-    for (auto &pp: p) max_p = max(max_p, pp);
-    double sum = 0;
-    for (auto &pp: p) sum += pp = exp(pp - max_p);
+    float max_p = -1e9;
+    for (int i = 0; i < N; i++) max_p = max(max_p, a[i]);
+    float sum = 0;
+    for (int i = 0; i < N; i++) sum += a[i] = exp(a[i] - max_p);
     sum = 1.0 / sum;
-    for (auto &pp: p) pp *= sum;
+    for (int i = 0; i < N; i++) a[i] *= sum;
 }

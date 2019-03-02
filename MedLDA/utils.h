@@ -7,6 +7,6 @@
 
 #include <vector>
 
-void Softmax(std::vector<double> &p);
+void Softmax(float *a, int N);
 
 #endif //MEDLDA_UTILS_H

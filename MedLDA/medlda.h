@@ -15,6 +15,7 @@ public:
     MedLDA(Corpus &corpus, Corpus &testCorpus, int K, float alpha, float beta, float C, float ell, float eps);
 
     void ComputePhi();
+    void ComputeDocProb();
     void SampleDoc(int d);
     void SampleWord(int w);
     void SampleTestDoc(int d);
@@ -31,7 +32,7 @@ private:
     float alpha, beta, C, ell;
     std::vector<int> cdk, cwk, ck;
     std::vector<float> phi, inv_ck;
-    std::vector<float> prob;
+    std::vector<float> prob, doc_prob;
 
     std::vector<float> test_cdk;
 

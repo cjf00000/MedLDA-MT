@@ -13,7 +13,7 @@ MedLDA::MedLDA(Corpus &corpus, Corpus &testCorpus,
     : corpus(corpus), testCorpus(testCorpus),
       K(K), alpha(alpha), beta(beta), C(C), ell(ell),
       cdk(corpus.num_docs * K), cwk(corpus.V * K), ck(K),
-      phi(corpus.V * K), inv_ck(K), prob(K),
+      phi(corpus.V * K), inv_ck(K), prob(K), doc_prob(corpus.num_docs * K),
       test_cdk(testCorpus.num_docs * K)
 {
     for (int c = 0; c < corpus.num_classes; c++)
@@ -42,18 +42,24 @@ void MedLDA::ComputePhi()
             phi[v * K + k] = (cwk[v * K + k] + beta) * inv_ck[k];
 }
 
-void MedLDA::SampleDoc(int d)
+void MedLDA::ComputeDocProb()
 {
     Clock clk;
-    auto *cd = cdk.data() + d * K;
-    std::vector<double> doc_prob(K);
-    for (int c = 0; c < corpus.num_classes; c++)
-        for (int k = 0; k < K; k++)
-            doc_prob[k] += svm[c].w[k] * svm[c].alpha[d] * corpus.ys[c][d];
-    Softmax(doc_prob);
+    for (int d = 0; d < corpus.num_docs; d++) {
+        auto *dp = doc_prob.data() + d * K;
+        for (int c = 0; c < corpus.num_classes; c++)
+            for (int k = 0; k < K; k++)
+                dp[k] += svm[c].w[k] * svm[c].alpha[d] * corpus.ys[c][d];
+        Softmax(dp, K);
+    }
     classTime += clk.toc();
+}
 
-    clk.tic();
+void MedLDA::SampleDoc(int d)
+{
+    auto *cd = cdk.data() + d * K;
+    auto *dp = doc_prob.data() + d * K;
+    Clock clk;
     corpus.ForDoc(d, [&](int w, int &z) {
         auto *cw = cwk.data() + w * K;
         --cd[z];
@@ -63,7 +69,7 @@ void MedLDA::SampleDoc(int d)
 
         float sum = 0;
         for (int k = 0; k < K; k++)
-            prob[k] = sum += (cd[k] + alpha) * (cw[k] + beta) * inv_ck[k] * doc_prob[k];
+            prob[k] = sum += (cd[k] + alpha) * (cw[k] + beta) * inv_ck[k] * dp[k];
 
         float pos = sum * u01(generator);
         int k = 0;
@@ -80,7 +86,6 @@ void MedLDA::SampleDoc(int d)
 
 void MedLDA::SampleWord(int w)
 {
-
 }
 
 void MedLDA::SampleTestDoc(int d)
@@ -141,6 +146,7 @@ void MedLDA::Train()
         double acc = SolveSVM();
         svmTime = clk.toc();
 
+        ComputeDocProb();
         for (int d = 0; d < corpus.num_docs; d++)
             SampleDoc(d);
 
