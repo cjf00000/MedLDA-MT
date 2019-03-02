@@ -5,6 +5,7 @@
 #include "medlda.h"
 #include "utils.h"
 #include "clock.h"
+#include "bit.h"
 #include <iostream>
 using namespace std;
 
@@ -79,6 +80,16 @@ void MedLDA::ComputeDocProb()
                 dph.data.push_back(Entry{k, dp[k] - FLAGS_epsilon});
                 doc_prob_nnz++;
             }
+
+//        if (u01(generator) < 0.0003) {
+//            float ss = 0;
+//            for (auto &entry: dph.data)
+//                cout << entry.k << ':' << entry.v << ' ';
+//            cout << endl;
+//            for (int c = 0; c < corpus.num_classes; c++) {
+//                cout << corpus.ys[c][d] << ' ' << svm[c].alpha[d] << endl;
+//            }
+//        }
     }
     classTime += clk.toc();
 }
@@ -118,12 +129,15 @@ void MedLDA::SampleWord(int w)
     auto *cw = cwk.data() + w * K;
 
     std::vector<float> phi(K);
-    float phi_sum = 0;
-    for (int k = 0; k < K; k++)
-        phi_sum += phi[k] = (cw[k] + beta) / (ck[k] + beta * corpus.V);
+    //float phi_sum = 0;
+    BIT bit;
+    bit.Resize(K);
+    for (int k = 0; k < K; k++) {
+        phi[k] = (cw[k] + beta) / (ck[k] + beta * corpus.V);
+        bit.Update(k, phi[k]);
+    }
 
     std::vector<float> prob_1(K), prob_2(K);
-
     corpus.ForWord(w, [&](int d, int &z) {
         auto *cd = cdk.data() + d * K;
         auto &s_cd = sparse_cdk[d];
@@ -133,14 +147,16 @@ void MedLDA::SampleWord(int w)
         s_cd.Update(z, -1);
         --cw[z];
         --ck[z];
-        phi_sum -= phi[z];
-        phi_sum += phi[z] = (cw[z] + beta) / (ck[z] + beta * corpus.V);
+        float old_phi = phi[z];
+        float new_phi = (cw[z] + beta) / (ck[z] + beta * corpus.V);
+        bit.Update(z, new_phi - old_phi);
+        phi[z] = new_phi;
 
         int k;
         while (1) {
             float sum_1 = 0;
             float sum_2 = 0;
-            float sum_3 = alpha * FLAGS_epsilon * phi_sum;
+            float sum_3 = alpha * FLAGS_epsilon * bit.Sum();
             for (size_t idx = 0; idx < s_cd.Size(); idx++) {
                 auto &entry = s_cd.data[idx];
                 prob_1[idx] = sum_1 += entry.v * phi[entry.k] * dp[entry.k];
@@ -175,11 +191,8 @@ void MedLDA::SampleWord(int w)
                 break;
             } else {
                 num_3++;
-                pos -= sum_1 + sum_2;
-                float sum = 0;
-                for (int k = 0; k < K; k++)
-                    prob[k] = sum += alpha * phi[k] * FLAGS_epsilon;
-                while (k + 1 < K && pos > prob[k]) k++;
+                float new_pos = u01(generator) * bit.Sum();
+                k = bit.GetIndex(new_pos);
 
                 float gap = max(FLAGS_epsilon - dp[k], 0.0);
                 if (u01(generator) * FLAGS_epsilon < gap)
@@ -194,8 +207,10 @@ void MedLDA::SampleWord(int w)
         s_cd.Update(z, 1);
         ++cw[z];
         ++ck[z];
-        phi_sum -= phi[z];
-        phi_sum += phi[z] = (cw[z] + beta) / (ck[z] + beta * corpus.V);
+        old_phi = phi[z];
+        new_phi = (cw[z] + beta) / (ck[z] + beta * corpus.V);
+        bit.Update(z, new_phi - old_phi);
+        phi[z] = new_phi;
     });
     ldaTime += clk.toc();
 }

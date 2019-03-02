@@ -10,8 +10,10 @@
 add_executable(svm svm_main.cpp svm.cpp corpus.cpp)
 target_link_libraries(svm gflags)
 
-add_executable(medlda medlda_main.cpp corpus.cpp medlda.cpp svm.cpp utils.cpp sparse_vector.cpp)
+add_executable(medlda medlda_main.cpp corpus.cpp medlda.cpp svm.cpp utils.cpp sparse_vector.cpp bit.cpp)
 target_link_libraries(medlda gflags)
+
+add_executable(bit_test bit.cpp bit_test.cpp)
 
 #add_executable(lda main.cpp)
 #target_link_libraries(lda ${LINK_LIBS})
