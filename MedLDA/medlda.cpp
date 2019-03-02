@@ -8,6 +8,8 @@
 #include <iostream>
 using namespace std;
 
+DEFINE_bool(fast, false, "Fast sampling of topic assignment");
+
 MedLDA::MedLDA(Corpus &corpus, Corpus &testCorpus,
                int K, float alpha, float beta, float C, float ell, float eps)
     : corpus(corpus), testCorpus(testCorpus),
@@ -19,18 +21,32 @@ MedLDA::MedLDA(Corpus &corpus, Corpus &testCorpus,
     for (int c = 0; c < corpus.num_classes; c++)
         svm.push_back(SVM(corpus.num_docs, K, 2 * C, ell, eps));
 
-    corpus.AllocZDoc(K);
-    testCorpus.AllocZDoc(K);
-    for (int d = 0; d < corpus.num_docs; d++) {
-        corpus.ForDoc(d, [&](int w, int k) {
-            cdk[d * K + k]++;
-            cwk[w * K + k]++;
-            ck[k]++;
-        });
+    if (!FLAGS_fast) {
+        corpus.AllocZDoc(K);
+        for (int d = 0; d < corpus.num_docs; d++) {
+            corpus.ForDoc(d, [&](int w, int k) {
+                cdk[d * K + k]++;
+                cwk[w * K + k]++;
+                ck[k]++;
+            });
+        }
+    } else {
+        corpus.AllocZWord(K);
+        for (int w = 0; w < corpus.V; w++) {
+            corpus.ForWord(w, [&](int d, int k) {
+                cdk[d * K + k]++;
+                cwk[w * K + k]++;
+                ck[k]++;
+            });
+        }
     }
+
+    testCorpus.AllocZDoc(K);
     ComputePhi();
 
     cout << "Initialized" << endl;
+    if (FLAGS_fast)
+        cout << "Fast sampling..." << endl;
 }
 
 void MedLDA::ComputePhi()
@@ -86,6 +102,31 @@ void MedLDA::SampleDoc(int d)
 
 void MedLDA::SampleWord(int w)
 {
+    auto *cw = cwk.data() + w * K;
+    Clock clk;
+    corpus.ForWord(w, [&](int d, int &z) {
+        auto *cd = cdk.data() + d * K;
+        auto *dp = doc_prob.data() + d * K;
+        --cd[z];
+        --cw[z];
+        --ck[z];
+        inv_ck[z] = 1.0 / (ck[z] + beta * corpus.V);
+
+        float sum = 0;
+        for (int k = 0; k < K; k++)
+            prob[k] = sum += (cd[k] + alpha) * (cw[k] + beta) * inv_ck[k] * dp[k];
+
+        float pos = sum * u01(generator);
+        int k = 0;
+        while (k + 1 < K && pos > prob[k]) k++;
+        z = k;
+
+        ++cd[z];
+        ++cw[z];
+        ++ck[z];
+        inv_ck[z] = 1.0 / (ck[z] + beta * corpus.V);
+    });
+    ldaTime += clk.toc();
 }
 
 void MedLDA::SampleTestDoc(int d)
@@ -147,8 +188,13 @@ void MedLDA::Train()
         svmTime = clk.toc();
 
         ComputeDocProb();
-        for (int d = 0; d < corpus.num_docs; d++)
-            SampleDoc(d);
+        if (!FLAGS_fast) {
+            for (int d = 0; d < corpus.num_docs; d++)
+                SampleDoc(d);
+        } else {
+            for (int w = 0; w < corpus.V; w++)
+                SampleWord(w);
+        }
 
         ComputePhi();
         double perplexity = Perplexity();

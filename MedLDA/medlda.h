@@ -7,8 +7,11 @@
 
 #include "corpus.h"
 #include "svm.h"
+#include "gflags/gflags.h"
 #include <vector>
 #include <random>
+
+DECLARE_bool(fast);
 
 class MedLDA {
 public:

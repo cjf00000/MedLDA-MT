@@ -58,10 +58,10 @@ Corpus::Corpus(const std::string &data_file, Corpus *trainCorpus, bool multi_lab
             num_docs++;
             w.push_back(move(doc));
         }
-        w.resize(V);
-        for (int d = 0; d < num_docs; d++) {
-            for (auto ww: w[d])
-                w[ww].push_back(d);
+        d.resize(V);
+        for (int i = 0; i < num_docs; i++) {
+            for (auto ww: w[i])
+                d[ww].push_back(i);
         }
         Save(data_file);
     }
@@ -95,7 +95,6 @@ void Corpus::AllocZDoc(int K) {
 }
 
 void Corpus::AllocZWord(int K) {
-    dz.resize(d.size());
     for (int w = 0; w < V; w++) {
         dz[w].resize(d[w].size());
         for (auto &k: dz[w])
