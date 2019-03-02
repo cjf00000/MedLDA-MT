@@ -4,9 +4,13 @@
 #include "sparse_vector.h"
 #include <cmath>
 
-void SparseVector::From(std::vector<float> &dense) {
-    data.clear();
-    for (size_t i = 0; i < dense.size(); i++)
-        if (fabs(dense[i]) > 1e-7)
-            data.push_back(Entry{(int)i, dense[i]});
+void SparseVector::Update(int k, float delta) {
+    bool found = false;
+    for (auto &entry: data)
+        if (entry.k == k) {
+            found = true;
+            entry.v += delta;
+        }
+    if (!found)
+        data.push_back(Entry{k, delta});
 }

@@ -9,8 +9,16 @@
 #include <vector>
 
 struct SparseVector {
-    void From(std::vector<float> &dense);
+    template <class T>
+    void From(T *dense, int N) {
+        data.clear();
+        for (int i = 0; i < N; i++)
+            if (fabs(dense[i]) > 1e-7)
+                data.push_back(Entry{(int)i, dense[i]});
+    }
+
     int Size() { return data.size(); }
+    void Update(int k, float delta);
 
     std::vector<Entry> data;
 };

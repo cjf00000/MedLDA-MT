@@ -9,13 +9,13 @@
 using namespace std;
 
 DEFINE_bool(fast, false, "Fast sampling of topic assignment");
-DEFINE_double(epsilon, 0.003, "Lower bound of doc prob");
+DEFINE_double(epsilon, 0.01, "Lower bound of doc prob");
 
 MedLDA::MedLDA(Corpus &corpus, Corpus &testCorpus,
                int K, float alpha, float beta, float C, float ell, float eps)
     : corpus(corpus), testCorpus(testCorpus),
       K(K), alpha(alpha), beta(beta), C(C), ell(ell),
-      cdk(corpus.num_docs * K), cwk(corpus.V * K), ck(K),
+      cdk(corpus.num_docs * K), cwk(corpus.V * K), ck(K), sparse_cdk(corpus.num_docs),
       phi(corpus.V * K), inv_ck(K), prob(K), doc_prob(corpus.num_docs * K),
       doc_prob_hat(corpus.num_docs),
       test_cdk(testCorpus.num_docs * K)
@@ -126,9 +126,11 @@ void MedLDA::SampleWord(int w)
 
     corpus.ForWord(w, [&](int d, int &z) {
         auto *cd = cdk.data() + d * K;
+        auto &s_cd = sparse_cdk[d];
         auto *dp = doc_prob.data() + d * K;
         auto &dph = doc_prob_hat[d];
         --cd[z];
+        s_cd.Update(z, -1);
         --cw[z];
         --ck[z];
         phi_sum -= phi[z];
@@ -139,8 +141,10 @@ void MedLDA::SampleWord(int w)
             float sum_1 = 0;
             float sum_2 = 0;
             float sum_3 = alpha * FLAGS_epsilon * phi_sum;
-            for (int k = 0; k < K; k++)
-                sum_1 += cd[k] * phi[k] * dp[k];
+            for (size_t idx = 0; idx < s_cd.Size(); idx++) {
+                auto &entry = s_cd.data[idx];
+                prob_1[idx] = sum_1 += entry.v * phi[entry.k] * dp[entry.k];
+            }
 
             for (size_t idx = 0; idx < dph.Size(); idx++) {
                 auto &entry = dph.data[idx];
@@ -149,10 +153,13 @@ void MedLDA::SampleWord(int w)
             float pos = (sum_1 + sum_2 + sum_3) * u01(generator);
             k = 0;
             if (pos < sum_1) {
-                float sum = 0;
-                for (int k = 0; k < K; k++)
-                    prob[k] = sum += cd[k] * phi[k] * dp[k];
-                while (k + 1 < K && pos > prob[k]) k++;
+                while (k + 1 < s_cd.Size() && pos > prob_1[k]) k++;
+                if (k >= s_cd.Size()) {
+                    // Shouldn't happen, just for numerical safety
+                    num_reject++;
+                    continue;
+                }
+                k = s_cd.data[k].k;
                 break;
             } else if (pos < sum_1 + sum_2) {
                 pos -= sum_1;
@@ -181,6 +188,7 @@ void MedLDA::SampleWord(int w)
         z = k;
 
         ++cd[z];
+        s_cd.Update(z, 1);
         ++cw[z];
         ++ck[z];
         phi_sum -= phi[z];
@@ -241,7 +249,7 @@ double MedLDA::SolveSVM()
 void MedLDA::Train()
 {
     for (int iter = 0; iter < 100; iter++) {
-        classTime = ldaTime = 0;
+        classTime = ldaTime = cdk_nnz = 0;
 
         Clock clk;
         double acc = SolveSVM();
@@ -253,6 +261,10 @@ void MedLDA::Train()
             for (int d = 0; d < corpus.num_docs; d++)
                 SampleDoc(d);
         } else {
+            for (int d = 0; d < corpus.num_docs; d++) {
+                sparse_cdk[d].From(cdk.data() + d * K, K);
+                cdk_nnz += sparse_cdk[d].Size();
+            }
             for (int w = 0; w < corpus.V; w++)
                 SampleWord(w);
         }
@@ -263,7 +275,7 @@ void MedLDA::Train()
              << " perplexity " << perplexity
              << " nSV " << nSV
              << " nReject " << num_reject
-             << " nnz " << doc_prob_nnz
+             << " nnz " << doc_prob_nnz << ' ' << cdk_nnz
              << " time " << svmTime << " " << classTime << " " << ldaTime
              << " training accuracy " << acc << endl;
 
