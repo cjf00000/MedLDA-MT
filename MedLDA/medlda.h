@@ -35,6 +35,7 @@ private:
     std::vector<SVM> svm;
     int K, nSV;
     int num_reject, doc_prob_nnz, cdk_nnz;
+    int num_1, num_2, num_3;
     float alpha, beta, C, ell;
     std::vector<int> cdk, cwk, ck;
     std::vector<SparseVector> sparse_cdk;

@@ -153,6 +153,7 @@ void MedLDA::SampleWord(int w)
             float pos = (sum_1 + sum_2 + sum_3) * u01(generator);
             k = 0;
             if (pos < sum_1) {
+                num_1++;
                 while (k + 1 < s_cd.Size() && pos > prob_1[k]) k++;
                 if (k >= s_cd.Size()) {
                     // Shouldn't happen, just for numerical safety
@@ -162,6 +163,7 @@ void MedLDA::SampleWord(int w)
                 k = s_cd.data[k].k;
                 break;
             } else if (pos < sum_1 + sum_2) {
+                num_2++;
                 pos -= sum_1;
                 while (k + 1 < dph.Size() && pos > prob_2[k]) k++;
                 if (k >= dph.Size()) {
@@ -172,6 +174,7 @@ void MedLDA::SampleWord(int w)
                 k = dph.data[k].k;
                 break;
             } else {
+                num_3++;
                 pos -= sum_1 + sum_2;
                 float sum = 0;
                 for (int k = 0; k < K; k++)
@@ -250,6 +253,7 @@ void MedLDA::Train()
 {
     for (int iter = 0; iter < 100; iter++) {
         classTime = ldaTime = cdk_nnz = 0;
+        num_1 = num_2 = num_3 = 0;
 
         Clock clk;
         double acc = SolveSVM();
@@ -277,6 +281,7 @@ void MedLDA::Train()
              << " nReject " << num_reject
              << " nnz " << doc_prob_nnz << ' ' << cdk_nnz
              << " time " << svmTime << " " << classTime << " " << ldaTime
+             << " num " << num_1 << " " << num_2 << " " << num_3
              << " training accuracy " << acc << endl;
 
         if (iter % 10 == 0)
