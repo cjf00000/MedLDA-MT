@@ -30,12 +30,12 @@ int main(int argc, char **argv) {
         Feature feature;
         for (auto &doc: corpus.w) {
             feature.clear();
-            sort(doc.begin(), doc.end(), [](Token &a, Token &b) { return a.w < b.w; });
+            sort(doc.begin(), doc.end());
             int N = (int)doc.size();
             int j = 0;
             for (int i = 0; i < N; i = j) {
-                for (j = i; j < N && doc[i].w == doc[j].w; j++);
-                feature.push_back(Entry{doc[i].w, (float)(j - i)});
+                for (j = i; j < N && doc[i] == doc[j]; j++);
+                feature.push_back(Entry{doc[i], (float)(j - i)});
             }
             X.push_back(feature);
         }

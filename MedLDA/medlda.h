@@ -16,6 +16,7 @@ public:
 
     void ComputePhi();
     void SampleDoc(int d);
+    void SampleWord(int w);
     void SampleTestDoc(int d);
     double SolveSVM();
 
@@ -36,6 +37,8 @@ private:
 
     std::mt19937 generator;
     std::uniform_real_distribution<float> u01;
+
+    double svmTime, classTime, ldaTime;
 };
 
 

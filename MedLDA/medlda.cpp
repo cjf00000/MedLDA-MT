@@ -4,6 +4,7 @@
 
 #include "medlda.h"
 #include "utils.h"
+#include "clock.h"
 #include <iostream>
 using namespace std;
 
@@ -18,13 +19,14 @@ MedLDA::MedLDA(Corpus &corpus, Corpus &testCorpus,
     for (int c = 0; c < corpus.num_classes; c++)
         svm.push_back(SVM(corpus.num_docs, K, 2 * C, ell, eps));
 
+    corpus.AllocZDoc(K);
+    testCorpus.AllocZDoc(K);
     for (int d = 0; d < corpus.num_docs; d++) {
-        for (auto &token: corpus.w[d]) {
-            token.z = generator() % K;
-            cdk[d * K + token.z]++;
-            cwk[token.w * K + token.z]++;
-            ck[token.z]++;
-        }
+        corpus.ForDoc(d, [&](int w, int k) {
+            cdk[d * K + k]++;
+            cwk[w * K + k]++;
+            ck[k]++;
+        });
     }
     ComputePhi();
 
@@ -42,19 +44,22 @@ void MedLDA::ComputePhi()
 
 void MedLDA::SampleDoc(int d)
 {
+    Clock clk;
     auto *cd = cdk.data() + d * K;
     std::vector<double> doc_prob(K);
     for (int c = 0; c < corpus.num_classes; c++)
         for (int k = 0; k < K; k++)
             doc_prob[k] += svm[c].w[k] * svm[c].alpha[d] * corpus.ys[c][d];
     Softmax(doc_prob);
+    classTime += clk.toc();
 
-    for (auto &token: corpus.w[d]) {
-        auto *cw = cwk.data() + token.w * K;
-        --cd[token.z];
-        --cw[token.z];
-        --ck[token.z];
-        inv_ck[token.z] = 1.0 / (ck[token.z] + beta * corpus.V);
+    clk.tic();
+    corpus.ForDoc(d, [&](int w, int &z) {
+        auto *cw = cwk.data() + w * K;
+        --cd[z];
+        --cw[z];
+        --ck[z];
+        inv_ck[z] = 1.0 / (ck[z] + beta * corpus.V);
 
         float sum = 0;
         for (int k = 0; k < K; k++)
@@ -63,13 +68,19 @@ void MedLDA::SampleDoc(int d)
         float pos = sum * u01(generator);
         int k = 0;
         while (k + 1 < K && pos > prob[k]) k++;
-        token.z = k;
+        z = k;
 
-        ++cd[token.z];
-        ++cw[token.z];
-        ++ck[token.z];
-        inv_ck[token.z] = 1.0 / (ck[token.z] + beta * corpus.V);
-    }
+        ++cd[z];
+        ++cw[z];
+        ++ck[z];
+        inv_ck[z] = 1.0 / (ck[z] + beta * corpus.V);
+    });
+    ldaTime += clk.toc();
+}
+
+void MedLDA::SampleWord(int w)
+{
+
 }
 
 void MedLDA::SampleTestDoc(int d)
@@ -77,15 +88,12 @@ void MedLDA::SampleTestDoc(int d)
     vector<int> cd(K);
     auto *mean_cd = test_cdk.data() + d * K;
     fill(mean_cd, mean_cd + K, 0);
-    for (auto &token: testCorpus.w[d]) {
-        token.z = generator() % K;
-        cd[token.z]++;
-    }
+    testCorpus.ForDoc(d, [&](int w, int z) { cd[z]++; });
 
     for (int iter = 0; iter <= 20; iter++) {
-        for (auto &token: testCorpus.w[d]) {
-            auto *wp = phi.data() + token.w * K;
-            --cd[token.z];
+        testCorpus.ForDoc(d, [&](int w, int &z) {
+            auto *wp = phi.data() + w * K;
+            --cd[z];
 
             float sum = 0;
             for (int k = 0; k < K; k++)
@@ -94,10 +102,10 @@ void MedLDA::SampleTestDoc(int d)
             float pos = sum * u01(generator);
             int k = 0;
             while (k + 1 < K && pos > prob[k]) k++;
-            token.z = k;
+            z = k;
 
-            ++cd[token.z];
-        }
+            ++cd[z];
+        });
         if (iter >= 10)
             for (int k = 0; k < K; k++)
                 mean_cd[k] += (double)cd[k] / 10 / testCorpus.w[d].size();
@@ -127,7 +135,11 @@ double MedLDA::SolveSVM()
 void MedLDA::Train()
 {
     for (int iter = 0; iter < 100; iter++) {
+        classTime = ldaTime = 0;
+
+        Clock clk;
         double acc = SolveSVM();
+        svmTime = clk.toc();
 
         for (int d = 0; d < corpus.num_docs; d++)
             SampleDoc(d);
@@ -137,6 +149,7 @@ void MedLDA::Train()
         cout << "Iteration " << iter
              << " perplexity " << perplexity
              << " nSV " << nSV
+             << " time " << svmTime << " " << classTime << " " << ldaTime
              << " training accuracy " << acc << endl;
 
         if (iter % 10 == 0)
@@ -168,13 +181,14 @@ double MedLDA::Perplexity()
     for (int d = 0; d < corpus.num_docs; d++) {
         for (int k = 0; k < K; k++)
             theta[k] = (cdk[d * K + k] + alpha) / (corpus.w[d].size() + alpha * K);
-        for (auto &token: corpus.w[d]) {
+
+        corpus.ForDoc(d, [&](int w, int z) {
             double l = 0;
             for (int k = 0; k < K; k++)
-                l += theta[k] * phi[token.w * K + k];
+                l += theta[k] * phi[w * K + k];
 
             log_likelihood += log(l);
-        }
+        });
     }
     return exp(-log_likelihood / corpus.T);
 }

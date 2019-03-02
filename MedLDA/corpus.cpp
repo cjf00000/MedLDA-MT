@@ -31,7 +31,7 @@ Corpus::Corpus(const std::string &data_file, Corpus *trainCorpus, bool multi_lab
         ifstream f_data(data_file.c_str());
         std::string line;
         while (getline(f_data, line)) {
-            std::vector<Token> doc;
+            std::vector<int> doc;
             for (auto &c: line)
                 if (c == ':')
                     c = ' ';
@@ -52,11 +52,16 @@ Corpus::Corpus(const std::string &data_file, Corpus *trainCorpus, bool multi_lab
                 }
                 id = word_to_id[word];
 
-                while (cnt--) doc.push_back(Token{id, 0});
+                while (cnt--) doc.push_back(id);
             }
             T += doc.size();
             num_docs++;
             w.push_back(move(doc));
+        }
+        w.resize(V);
+        for (int d = 0; d < num_docs; d++) {
+            for (auto ww: w[d])
+                w[ww].push_back(d);
         }
         Save(data_file);
     }
@@ -80,37 +85,60 @@ Corpus::Corpus(const std::string &data_file, Corpus *trainCorpus, bool multi_lab
     }
 }
 
-void Corpus::SaveArray(const std::string &data_file) {
+void Corpus::AllocZDoc(int K) {
+    z.resize(w.size());
+    for (int d = 0; d < num_docs; d++) {
+        z[d].resize(w[d].size());
+        for (auto &k: z[d])
+            k = generator() % K;
+    }
+}
+
+void Corpus::AllocZWord(int K) {
+    dz.resize(d.size());
+    for (int w = 0; w < V; w++) {
+        dz[w].resize(d[w].size());
+        for (auto &k: dz[w])
+            k = generator() % K;
+    }
+}
+
+void Corpus::SaveArray(const std::string &data_file, std::vector<std::vector<int>> &arr) {
     ofstream fout(data_file, ios::binary);
     std::vector<int> sizes;
     sizes.push_back(num_docs);
-    for (auto &a: w) sizes.push_back(a.size());
+    sizes.push_back(arr.size());
+    for (auto &a: arr) sizes.push_back(a.size());
     fout.write((char*)sizes.data(), sizes.size()*sizeof(int));
     fout.write((char*)y.data(), y.size()*sizeof(int));
 
-    for (auto &a: w)
-        fout.write((char*)a.data(), a.size()*sizeof(Token));
+    for (auto &a: arr)
+        fout.write((char*)a.data(), a.size()*sizeof(int));
 }
 
-void Corpus::LoadArray(const std::string &data_file) {
+void Corpus::LoadArray(const std::string &data_file, std::vector<std::vector<int>> &arr) {
     ifstream fin(data_file, ios::binary);
     std::vector<int> sizes;
+    int a_size;
     fin.read((char*)&num_docs, sizeof(int));
-    sizes.resize(num_docs);
-    fin.read((char*)sizes.data(), num_docs*sizeof(int));
+    fin.read((char*)&a_size, sizeof(int));
+
+    sizes.resize(a_size);
+    fin.read((char*)sizes.data(), a_size*sizeof(int));
     y.resize(num_docs);
     fin.read((char*)y.data(), num_docs*sizeof(int));
-    w.resize(num_docs);
-    for (int i = 0; i < num_docs; i++)
-        w[i].resize(sizes[i]);
-    for (auto &a: w)
-        fin.read((char*)a.data(), a.size()*sizeof(Token));
+    arr.resize(a_size);
+    for (int i = 0; i < a_size; i++)
+        arr[i].resize(sizes[i]);
+    for (auto &a: arr)
+        fin.read((char*)a.data(), a.size()*sizeof(int));
 }
 
 bool Corpus::Load(const std::string &data_file) {
-    auto bin_file = data_file + ".bin";
+    auto bin_d_file = data_file + ".bin.d";
+    auto bin_w_file = data_file + ".bin.w";
     auto vocab_file = data_file + ".vocab";
-    if (!is_file_exist(bin_file.c_str()))
+    if (!is_file_exist(bin_d_file.c_str()))
         return false;
 
     cout << "Found existing data. Loading..." << endl;
@@ -122,7 +150,8 @@ bool Corpus::Load(const std::string &data_file) {
         word_to_id[word] = V++;
     }
 
-    LoadArray(bin_file);
+    LoadArray(bin_d_file, d);
+    LoadArray(bin_w_file, w);
     T = 0;
     for (auto &doc: w)
         T += doc.size();
@@ -130,10 +159,12 @@ bool Corpus::Load(const std::string &data_file) {
 }
 
 void Corpus::Save(const std::string &data_file) {
-    auto bin_file = data_file + ".bin";
+    auto bin_d_file = data_file + ".bin.d";
+    auto bin_w_file = data_file + ".bin.w";
     auto vocab_file = data_file + ".vocab";
 
-    SaveArray(bin_file);
+    SaveArray(bin_d_file, d);
+    SaveArray(bin_w_file, w);
     ofstream f_vocab(vocab_file);
     for (auto &word: vocab)
         f_vocab << word << "\n";
