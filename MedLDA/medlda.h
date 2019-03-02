@@ -12,7 +12,8 @@
 #include <vector>
 #include <random>
 
-DECLARE_bool(fast);
+DECLARE_bool(fast_sampling);
+DECLARE_bool(fast_precompute);
 DECLARE_double(epsilon);
 
 class MedLDA {

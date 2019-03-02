@@ -9,7 +9,8 @@
 #include <iostream>
 using namespace std;
 
-DEFINE_bool(fast, false, "Fast sampling of topic assignment");
+DEFINE_bool(fast_sampling, false, "Fast sampling of topic assignment");
+DEFINE_bool(fast_precompute, false, "Sparsity-aware pre-compute of discriminative weight.");
 DEFINE_double(epsilon, 0.01, "Lower bound of doc prob");
 
 MedLDA::MedLDA(Corpus &corpus, Corpus &testCorpus,
@@ -24,7 +25,7 @@ MedLDA::MedLDA(Corpus &corpus, Corpus &testCorpus,
     for (int c = 0; c < corpus.num_classes; c++)
         svm.push_back(SVM(corpus.num_docs, K, 2 * C, ell, eps));
 
-    if (!FLAGS_fast) {
+    if (!FLAGS_fast_sampling) {
         corpus.AllocZDoc(K);
         for (int d = 0; d < corpus.num_docs; d++) {
             corpus.ForDoc(d, [&](int w, int k) {
@@ -48,7 +49,7 @@ MedLDA::MedLDA(Corpus &corpus, Corpus &testCorpus,
     ComputePhi();
 
     cout << "Initialized" << endl;
-    if (FLAGS_fast)
+    if (FLAGS_fast_sampling)
         cout << "Fast sampling..." << endl;
 }
 
@@ -67,9 +68,12 @@ void MedLDA::ComputeDocProb()
     Clock clk;
     for (int d = 0; d < corpus.num_docs; d++) {
         auto *dp = doc_prob.data() + d * K;
-        for (int c = 0; c < corpus.num_classes; c++)
-            for (int k = 0; k < K; k++)
-                dp[k] += svm[c].w[k] * svm[c].alpha[d] * corpus.ys[c][d];
+        for (int c = 0; c < corpus.num_classes; c++) {
+            if (!FLAGS_fast_precompute || svm[c].alpha[d] > 1e-7)
+                for (int k = 0; k < K; k++)
+                    dp[k] += svm[c].w[k] * svm[c].alpha[d] * corpus.ys[c][d];
+        }
+
         Softmax(dp, K);
 
         // Sparsify
@@ -276,7 +280,7 @@ void MedLDA::Train()
 
         ComputeDocProb();
         num_reject = 0;
-        if (!FLAGS_fast) {
+        if (!FLAGS_fast_sampling) {
             for (int d = 0; d < corpus.num_docs; d++)
                 SampleDoc(d);
         } else {

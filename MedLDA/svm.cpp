@@ -70,7 +70,7 @@ void SVM::Solve(std::vector<Feature> &X, std::vector<int> &y) {
 int SVM::nSV() {
     int cnt = 0;
     for (auto ai: alpha)
-        if (fabs(ai) > eps)
+        if (fabs(ai) > 1e-7)
             cnt++;
 
     return cnt;
