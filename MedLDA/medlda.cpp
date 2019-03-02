@@ -109,8 +109,14 @@ void MedLDA::SampleDoc(int d)
 
 void MedLDA::SampleWord(int w)
 {
-    auto *cw = cwk.data() + w * K;
     Clock clk;
+    auto *cw = cwk.data() + w * K;
+
+    std::vector<float> phi(K);
+    float phi_sum = 0;
+    for (int k = 0; k < K; k++)
+        phi_sum += phi[k] = (cw[k] + beta) / (ck[k] + beta * corpus.V);
+
     corpus.ForWord(w, [&](int d, int &z) {
         auto *cd = cdk.data() + d * K;
         auto *dp = doc_prob.data() + d * K;
@@ -118,39 +124,38 @@ void MedLDA::SampleWord(int w)
         --cd[z];
         --cw[z];
         --ck[z];
-        inv_ck[z] = 1.0 / (ck[z] + beta * corpus.V);
+        phi_sum -= phi[z];
+        phi_sum += phi[z] = (cw[z] + beta) / (ck[z] + beta * corpus.V);
 
         int k;
         while (1) {
             float sum_1 = 0;
             float sum_2 = 0;
-            float sum_3 = 0;
+            float sum_3 = alpha * FLAGS_epsilon * phi_sum;
             for (int k = 0; k < K; k++) {
-                float phi = (cw[k] + beta) * inv_ck[k];
-                sum_1 += cd[k] * phi * dp[k];
-                sum_2 += alpha * phi * dph[k];
-                sum_3 += alpha * phi * FLAGS_epsilon;
+                sum_1 += cd[k] * phi[k] * dp[k];
+                sum_2 += alpha * phi[k] * dph[k];
             }
             float pos = (sum_1 + sum_2 + sum_3) * u01(generator);
             k = 0;
             if (pos < sum_1) {
                 float sum = 0;
                 for (int k = 0; k < K; k++)
-                    prob[k] = sum += cd[k] * (cw[k] + beta) * inv_ck[k] * dp[k];
+                    prob[k] = sum += cd[k] * phi[k] * dp[k];
                 while (k + 1 < K && pos > prob[k]) k++;
                 break;
             } else if (pos < sum_1 + sum_2) {
                 pos -= sum_1;
                 float sum = 0;
                 for (int k = 0; k < K; k++)
-                    prob[k] = sum += alpha * (cw[k] + beta) * inv_ck[k] * dp[k];
+                    prob[k] = sum += alpha * phi[k] * dp[k];
                 while (k + 1 < K && pos > prob[k]) k++;
                 break;
             } else {
                 pos -= sum_1 + sum_2;
                 float sum = 0;
                 for (int k = 0; k < K; k++)
-                    prob[k] = sum += alpha * (cw[k] + beta) * inv_ck[k] * FLAGS_epsilon;
+                    prob[k] = sum += alpha * phi[k] * FLAGS_epsilon;
                 while (k + 1 < K && pos > prob[k]) k++;
 
                 float gap = dp[k] - dph[k];
@@ -165,7 +170,8 @@ void MedLDA::SampleWord(int w)
         ++cd[z];
         ++cw[z];
         ++ck[z];
-        inv_ck[z] = 1.0 / (ck[z] + beta * corpus.V);
+        phi_sum -= phi[z];
+        phi_sum += phi[z] = (cw[z] + beta) / (ck[z] + beta * corpus.V);
     });
     ldaTime += clk.toc();
 }
