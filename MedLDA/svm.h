@@ -8,6 +8,9 @@
 #include <vector>
 #include <random>
 #include "utils.h"
+#include "gflags/gflags.h"
+
+DECLARE_int32(max_svm_iters);
 
 typedef std::vector<Entry> Feature;
 
@@ -26,6 +29,7 @@ public:
 
     std::vector<double> alpha;
     std::vector<double> w;
+    int num_iters;
 
 private:
     std::vector<double> diag;

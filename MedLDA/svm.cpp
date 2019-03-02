@@ -8,6 +8,8 @@
 #include <iostream>
 using namespace std;
 
+DEFINE_int32(max_svm_iters, 10000, "Max number of SVM iterations per coordinate descent iteration.");
+
 SVM::SVM(int num_data, int num_features, double C, double ell, double eps)
         : num_data(num_data), num_features(num_features), C(C), ell(ell), eps(eps),
         diag(num_data), w(num_features), alpha(num_data), perm(num_data)
@@ -61,10 +63,11 @@ void SVM::Solve(std::vector<Feature> &X, std::vector<int> &y) {
 
 //        cout << "Iter " << iter << " Objective function " << obj << endl;
 
-        if (fabs(old_obj - obj) < eps)
+        if (fabs(old_obj - obj) < eps || iter >= FLAGS_max_svm_iters)
             break;
         old_obj = obj;
     }
+    num_iters = iter;
 }
 
 int SVM::nSV() {
