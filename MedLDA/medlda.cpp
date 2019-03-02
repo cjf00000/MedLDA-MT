@@ -9,7 +9,7 @@
 using namespace std;
 
 DEFINE_bool(fast, false, "Fast sampling of topic assignment");
-DEFINE_double(epsilon, 0.01, "Lower bound of doc prob");
+DEFINE_double(epsilon, 0.003, "Lower bound of doc prob");
 
 MedLDA::MedLDA(Corpus &corpus, Corpus &testCorpus,
                int K, float alpha, float beta, float C, float ell, float eps)
@@ -17,7 +17,7 @@ MedLDA::MedLDA(Corpus &corpus, Corpus &testCorpus,
       K(K), alpha(alpha), beta(beta), C(C), ell(ell),
       cdk(corpus.num_docs * K), cwk(corpus.V * K), ck(K),
       phi(corpus.V * K), inv_ck(K), prob(K), doc_prob(corpus.num_docs * K),
-      doc_prob_hat(corpus.num_docs * K),
+      doc_prob_hat(corpus.num_docs),
       test_cdk(testCorpus.num_docs * K)
 {
     for (int c = 0; c < corpus.num_classes; c++)
@@ -62,6 +62,7 @@ void MedLDA::ComputePhi()
 
 void MedLDA::ComputeDocProb()
 {
+    doc_prob_nnz = 0;
     Clock clk;
     for (int d = 0; d < corpus.num_docs; d++) {
         auto *dp = doc_prob.data() + d * K;
@@ -71,9 +72,13 @@ void MedLDA::ComputeDocProb()
         Softmax(dp, K);
 
         // Sparsify
-        auto *dph = doc_prob_hat.data() + d * K;
+        auto &dph = doc_prob_hat[d];
+        dph.data.clear();
         for (int k = 0; k < K; k++)
-            dph[k] = max(dp[k] - FLAGS_epsilon, 0.0);
+            if (dp[k] > FLAGS_epsilon) {
+                dph.data.push_back(Entry{k, dp[k] - FLAGS_epsilon});
+                doc_prob_nnz++;
+            }
     }
     classTime += clk.toc();
 }
@@ -117,10 +122,12 @@ void MedLDA::SampleWord(int w)
     for (int k = 0; k < K; k++)
         phi_sum += phi[k] = (cw[k] + beta) / (ck[k] + beta * corpus.V);
 
+    std::vector<float> prob_1(K), prob_2(K);
+
     corpus.ForWord(w, [&](int d, int &z) {
         auto *cd = cdk.data() + d * K;
         auto *dp = doc_prob.data() + d * K;
-        auto *dph = doc_prob_hat.data() + d * K;
+        auto &dph = doc_prob_hat[d];
         --cd[z];
         --cw[z];
         --ck[z];
@@ -132,9 +139,12 @@ void MedLDA::SampleWord(int w)
             float sum_1 = 0;
             float sum_2 = 0;
             float sum_3 = alpha * FLAGS_epsilon * phi_sum;
-            for (int k = 0; k < K; k++) {
+            for (int k = 0; k < K; k++)
                 sum_1 += cd[k] * phi[k] * dp[k];
-                sum_2 += alpha * phi[k] * dph[k];
+
+            for (size_t idx = 0; idx < dph.Size(); idx++) {
+                auto &entry = dph.data[idx];
+                prob_2[idx] = sum_2 += alpha * phi[entry.k] * entry.v;
             }
             float pos = (sum_1 + sum_2 + sum_3) * u01(generator);
             k = 0;
@@ -146,10 +156,13 @@ void MedLDA::SampleWord(int w)
                 break;
             } else if (pos < sum_1 + sum_2) {
                 pos -= sum_1;
-                float sum = 0;
-                for (int k = 0; k < K; k++)
-                    prob[k] = sum += alpha * phi[k] * dp[k];
-                while (k + 1 < K && pos > prob[k]) k++;
+                while (k + 1 < dph.Size() && pos > prob_2[k]) k++;
+                if (k >= dph.Size()) {
+                    // Shouldn't happen, just for numerical safety
+                    num_reject++;
+                    continue;
+                }
+                k = dph.data[k].k;
                 break;
             } else {
                 pos -= sum_1 + sum_2;
@@ -158,8 +171,8 @@ void MedLDA::SampleWord(int w)
                     prob[k] = sum += alpha * phi[k] * FLAGS_epsilon;
                 while (k + 1 < K && pos > prob[k]) k++;
 
-                float gap = dp[k] - dph[k];
-                if (u01(generator) * FLAGS_epsilon >= gap)
+                float gap = max(FLAGS_epsilon - dp[k], 0.0);
+                if (u01(generator) * FLAGS_epsilon < gap)
                     num_reject++;
                 else
                     break;
@@ -235,6 +248,7 @@ void MedLDA::Train()
         svmTime = clk.toc();
 
         ComputeDocProb();
+        num_reject = 0;
         if (!FLAGS_fast) {
             for (int d = 0; d < corpus.num_docs; d++)
                 SampleDoc(d);
@@ -248,6 +262,8 @@ void MedLDA::Train()
         cout << "Iteration " << iter
              << " perplexity " << perplexity
              << " nSV " << nSV
+             << " nReject " << num_reject
+             << " nnz " << doc_prob_nnz
              << " time " << svmTime << " " << classTime << " " << ldaTime
              << " training accuracy " << acc << endl;
 

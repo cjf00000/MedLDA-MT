@@ -7,6 +7,11 @@
 
 #include <vector>
 
+struct Entry {
+    int k;
+    float v;
+};
+
 void Softmax(float *a, int N);
 
 #endif //MEDLDA_UTILS_H

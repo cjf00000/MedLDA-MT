@@ -7,11 +7,7 @@
 
 #include <vector>
 #include <random>
-
-struct Entry {
-    int k;
-    float v;
-};
+#include "utils.h"
 
 typedef std::vector<Entry> Feature;
 

@@ -8,6 +8,7 @@
 #include "corpus.h"
 #include "svm.h"
 #include "gflags/gflags.h"
+#include "sparse_vector.h"
 #include <vector>
 #include <random>
 
@@ -33,11 +34,12 @@ private:
     Corpus &corpus, &testCorpus;
     std::vector<SVM> svm;
     int K, nSV;
-    int num_reject;
+    int num_reject, doc_prob_nnz;
     float alpha, beta, C, ell;
     std::vector<int> cdk, cwk, ck;
     std::vector<float> phi, inv_ck;
-    std::vector<float> prob, doc_prob, doc_prob_hat;
+    std::vector<float> prob, doc_prob;
+    std::vector<SparseVector> doc_prob_hat;
 
     std::vector<float> test_cdk;
 
