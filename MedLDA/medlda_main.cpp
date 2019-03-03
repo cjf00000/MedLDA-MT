@@ -4,6 +4,7 @@
 #include "gflags/gflags.h"
 #include "corpus.h"
 #include "medlda.h"
+#include <iostream>
 using namespace std;
 
 DEFINE_string(data, "../data/20news", "Prefix of the dataset");
@@ -17,6 +18,15 @@ DEFINE_bool(multi_label, false, "Multi-label or multi-class");
 
 int main(int argc, char **argv) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
+
+    cout << "---------------------------------------------------------------------" << endl;
+    std::vector<gflags::CommandLineFlagInfo> all_flags;
+    gflags::GetAllFlags(&all_flags);
+    for (const auto& flag : all_flags) {
+        if (flag.filename.find("src/") != 0) // HACK: filter out built-in flags
+            cout << flag.name << ": " << flag.current_value << endl;
+    }
+    cout << "---------------------------------------------------------------------" << endl;
 
     Corpus corpus(FLAGS_data + ".train", nullptr, FLAGS_multi_label);
     Corpus testCorpus(FLAGS_data + ".test", &corpus, FLAGS_multi_label);
