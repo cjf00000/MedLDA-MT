@@ -9,6 +9,8 @@
 #include <iostream>
 using namespace std;
 
+#define OutputField(name, var) { cout << """" << name << """" << ": " << var << ", "; }
+
 DEFINE_bool(fast_sampling, false, "Fast sampling of topic assignment");
 DEFINE_bool(fast_precompute, false, "Sparsity-aware pre-compute of discriminative weight.");
 DEFINE_double(epsilon, 0.01, "Lower bound of doc prob");
@@ -302,20 +304,32 @@ void MedLDA::Train()
 
         ComputePhi();
         double perplexity = Perplexity();
-        cout << "Iteration " << iter
-             << " perplexity " << perplexity
-             << " nSV " << nSV << " nSVMIters " << nSVMIters
-             << " nReject " << num_reject
-             << " nnz " << doc_prob_nnz << ' ' << cdk_nnz
-             << " time " << svmTime << " " << classTime << " " << ldaTime
-             << " num " << num_1 << " " << num_2 << " " << num_3;
-        if (!corpus.multi_label)
-             cout << " training accuracy " << accuracy << endl;
-        else
-            cout << " training F1 " << micro_f1 << ' ' << macro_f1 << endl;
-
+        cout << "{";
+        OutputField("iteration", iter);
+        OutputField("perplexity", perplexity);
+        OutputField("nSV", nSV);
+        OutputField("nSVMIteres", nSVMIters);
+        OutputField("nReject", num_reject);
+        OutputField("doc_prob_nnz", doc_prob_nnz);
+        OutputField("cdk_nnz", cdk_nnz);
+        OutputField("reject_rate", (double)num_reject / corpus.T);
+        OutputField("sparse_rate", (double)doc_prob_nnz / corpus.num_docs / K);
+        OutputField("cdk_sparse_rate", (double)cdk_nnz / corpus.num_docs / K);
+        OutputField("svmTime", svmTime);
+        OutputField("classTime", classTime);
+        OutputField("ldaTime", ldaTime);
+        OutputField("num_1", num_1);
+        OutputField("num_2", num_2);
+        OutputField("num_2", num_3);
+        if (!corpus.multi_label) {
+            OutputField("train_acc", accuracy);
+        } else {
+            OutputField("train_micro_F1", micro_f1);
+            OutputField("train_macro_F1", macro_f1);
+        }
         if (iter % 10 == 0)
             Test();
+        cout << "}\n";
     }
 }
 
@@ -333,11 +347,12 @@ void MedLDA::Test()
     for (int c = 0; c < corpus.num_classes; c++)
         pred.push_back(move(svm[c].Predict(X)));
 
-    if (!corpus.multi_label)
-        cout << "Testing accuracy = " << testCorpus.Accuracy(pred) << endl;
-    else {
+    if (!corpus.multi_label) {
+        OutputField("testing_accuracy", testCorpus.Accuracy(pred));
+    } else {
         auto res = testCorpus.F1(pred);
-        cout << "Testing f1 = " << res.first << ' ' << res.second << endl;
+        OutputField("testing_micro_f1", res.first);
+        OutputField("testing_macro_f1", res.second);
     }
 }
 
