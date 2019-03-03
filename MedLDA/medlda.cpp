@@ -248,7 +248,7 @@ void MedLDA::SampleTestDoc(int d)
     }
 }
 
-double MedLDA::SolveSVM()
+void MedLDA::SolveSVM()
 {
     std::vector<Feature> X;
     for (int d = 0; d < corpus.num_docs; d++) {
@@ -267,7 +267,13 @@ double MedLDA::SolveSVM()
         nSV += svm[c].nSV();
         nSVMIters += svm[c].num_iters;
     }
-    return corpus.Accuracy(pred);
+    if (!corpus.multi_label)
+        accuracy = corpus.Accuracy(pred);
+    else {
+        auto res = corpus.F1(pred);
+        micro_f1 = res.first;
+        macro_f1 = res.second;
+    }
 }
 
 void MedLDA::Train()
@@ -277,7 +283,7 @@ void MedLDA::Train()
         num_1 = num_2 = num_3 = 0;
 
         Clock clk;
-        double acc = SolveSVM();
+        SolveSVM();
         svmTime = clk.toc();
 
         ComputeDocProb();
@@ -302,8 +308,11 @@ void MedLDA::Train()
              << " nReject " << num_reject
              << " nnz " << doc_prob_nnz << ' ' << cdk_nnz
              << " time " << svmTime << " " << classTime << " " << ldaTime
-             << " num " << num_1 << " " << num_2 << " " << num_3
-             << " training accuracy " << acc << endl;
+             << " num " << num_1 << " " << num_2 << " " << num_3;
+        if (!corpus.multi_label)
+             cout << " training accuracy " << accuracy << endl;
+        else
+            cout << " training F1 " << micro_f1 << ' ' << macro_f1 << endl;
 
         if (iter % 10 == 0)
             Test();
@@ -324,7 +333,12 @@ void MedLDA::Test()
     for (int c = 0; c < corpus.num_classes; c++)
         pred.push_back(move(svm[c].Predict(X)));
 
-    cout << "Testing accuracy = " << testCorpus.Accuracy(pred) << endl;
+    if (!corpus.multi_label)
+        cout << "Testing accuracy = " << testCorpus.Accuracy(pred) << endl;
+    else {
+        auto res = testCorpus.F1(pred);
+        cout << "Testing f1 = " << res.first << ' ' << res.second << endl;
+    }
 }
 
 double MedLDA::Perplexity()

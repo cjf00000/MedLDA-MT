@@ -24,7 +24,6 @@ public:
     Corpus(const std::string &path, Corpus *trainCorpus = nullptr, bool multi_label = false);
 
     std::vector<std::vector<int>> w, d, z, dz;
-    std::vector<int> y;
     std::vector<std::vector<int>> ys;
     std::vector<std::string> vocab;
     std::map<std::string, int> word_to_id;
@@ -44,11 +43,12 @@ public:
             f(d[w][n], dz[w][n]);
     }
 
-    void SaveArray(const std::string &data_file, std::vector<std::vector<int>> &a);
-    void LoadArray(const std::string &data_file, std::vector<std::vector<int>> &a);
-    void Save(const std::string &data_file);
+    void SaveArray(const std::string &data_file, std::vector<std::vector<int>> &a, int size);
+    void LoadArray(const std::string &data_file, std::vector<std::vector<int>> &a, int &size);
+    void Save(const std::string &data_file); // num_docs, V, num_classes, vocab, w, d, ys
     bool Load(const std::string &data_file);
     double Accuracy(std::vector<std::vector<double>> &pred);
+    std::pair<double, double> F1(std::vector<std::vector<double>> &pred);
 
     bool multi_label;
     int num_docs, V, num_classes;

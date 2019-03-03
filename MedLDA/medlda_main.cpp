@@ -13,12 +13,13 @@ DEFINE_double(beta, 0.01, "Sum of beta");
 DEFINE_double(C, 1, "SVM cost");
 DEFINE_double(ell, 1, "SVM margin");
 DEFINE_double(tol, 0.1, "Tolerance of SVM solver");
+DEFINE_bool(multi_label, false, "Multi-label or multi-class");
 
 int main(int argc, char **argv) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
-    Corpus corpus(FLAGS_data + ".train");
-    Corpus testCorpus(FLAGS_data + ".test", &corpus);
+    Corpus corpus(FLAGS_data + ".train", nullptr, FLAGS_multi_label);
+    Corpus testCorpus(FLAGS_data + ".test", &corpus, FLAGS_multi_label);
     MedLDA model(corpus, testCorpus, FLAGS_K, FLAGS_alpha_sum / FLAGS_K, FLAGS_beta, FLAGS_C, FLAGS_ell, FLAGS_tol);
     model.Train();
 }

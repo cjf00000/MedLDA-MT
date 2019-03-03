@@ -25,7 +25,7 @@ public:
     void SampleDoc(int d);
     void SampleWord(int w);
     void SampleTestDoc(int d);
-    double SolveSVM();
+    void SolveSVM();
 
     void Train();
     void Test();
@@ -50,6 +50,7 @@ private:
     std::uniform_real_distribution<float> u01;
 
     double svmTime, classTime, ldaTime;
+    float accuracy, micro_f1, macro_f1;
 };
 
 
