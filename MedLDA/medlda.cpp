@@ -9,7 +9,7 @@
 #include <iostream>
 using namespace std;
 
-#define OutputField(name, var) { cout << """" << name << """" << ": " << var << ", "; }
+#define OutputField(name, var) { cout << "\"" << name << "\"" << ": " << var << ", "; }
 
 DEFINE_bool(fast_sampling, false, "Fast sampling of topic assignment");
 DEFINE_bool(fast_precompute, false, "Sparsity-aware pre-compute of discriminative weight.");
