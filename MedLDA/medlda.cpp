@@ -14,6 +14,8 @@ using namespace std;
 DEFINE_bool(fast_sampling, false, "Fast sampling of topic assignment");
 DEFINE_bool(fast_precompute, false, "Sparsity-aware pre-compute of discriminative weight.");
 DEFINE_double(epsilon, 0.01, "Lower bound of doc prob");
+DEFINE_int32(num_iters, 100, "Number of training iterations");
+DEFINE_int32(test_every, 10, "Test every [x] iterations");
 
 MedLDA::MedLDA(Corpus &corpus, Corpus &testCorpus,
                int K, float alpha, float beta, float C, float ell, float eps)
@@ -280,7 +282,7 @@ void MedLDA::SolveSVM()
 
 void MedLDA::Train()
 {
-    for (int iter = 0; iter < 100; iter++) {
+    for (int iter = 0; iter < FLAGS_num_iters; iter++) {
         classTime = ldaTime = cdk_nnz = 0;
         num_1 = num_2 = num_3 = 0;
 
@@ -327,7 +329,7 @@ void MedLDA::Train()
             OutputField("train_micro_F1", micro_f1);
             OutputField("train_macro_F1", macro_f1);
         }
-        if (iter % 10 == 0)
+        if (iter % FLAGS_test_every == 0)
             Test();
         cout << "}\n";
     }
@@ -335,6 +337,7 @@ void MedLDA::Train()
 
 void MedLDA::Test()
 {
+    Clock clk;
     std::vector<Feature> X;
     for (int d = 0; d < testCorpus.num_docs; d++) {
         Feature doc;
@@ -347,6 +350,7 @@ void MedLDA::Test()
     for (int c = 0; c < corpus.num_classes; c++)
         pred.push_back(move(svm[c].Predict(X)));
 
+    OutputField("testing_time", clk.toc());
     if (!corpus.multi_label) {
         OutputField("testing_accuracy", testCorpus.Accuracy(pred));
     } else {
