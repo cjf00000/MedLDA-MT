@@ -9,6 +9,7 @@
 #include "svm.h"
 #include "gflags/gflags.h"
 #include "sparse_vector.h"
+#include "bit.h"
 #include <vector>
 #include <random>
 
@@ -49,8 +50,11 @@ private:
     std::mt19937 generator;
     std::uniform_real_distribution<float> u01;
 
-    double svmTime, classTime, ldaTime;
+    double svmTime, classTime, ldaTime, avg_cdk;
     float accuracy, micro_f1, macro_f1;
+
+    BIT bit;
+    int global_iter;
 };
 
 

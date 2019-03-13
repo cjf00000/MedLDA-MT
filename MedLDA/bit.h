@@ -12,6 +12,7 @@ struct BIT {
     BIT();
     void Resize(int M);
     void Update(int k, float delta);
+    void Build(float *data, int K);
     int GetIndex(float val);
     int LowBit(int x);
     float Sum();

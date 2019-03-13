@@ -10,12 +10,20 @@ def run(args):
 
 if __name__ == '__main__':
     tasks = []
-    common_params = '--data ../data/rcv1_small --fast_precompute --fast_sampling --max_svm_iters=3 --multi_label'
-    for K in [100, 200, 400, 600, 800, 1000]:
+    # common_params = '--data ../data/rcv1_small --fast_precompute --fast_sampling --max_svm_iters=3 --multi_label'
+    # for K in [100, 200, 400, 600, 800, 1000]:
+    #     for C in [0.1, 0.3, 1, 3, 10]:
+    #         for ell in [0.1, 0.3, 1, 3, 10]:
+    #             params = '{} --K {} --C {} --ell {}'.format(common_params, K, C, ell)
+    #             id = 'rcv1_small_fast_K{}_C{}_ell{}'.format(K, C, ell)
+    #             tasks.append((params, id))
+
+    common_params = '--data ../data/20news --test_every 1 --epsilon 0.02 --alpha_sum 10 --num_iters=20'
+    for K in [200]:
         for C in [0.1, 0.3, 1, 3, 10]:
             for ell in [0.1, 0.3, 1, 3, 10]:
                 params = '{} --K {} --C {} --ell {}'.format(common_params, K, C, ell)
-                id = 'rcv1_small_fast_K{}_C{}_ell{}'.format(K, C, ell)
+                id = '20news_K{}_C{}_ell{}'.format(K, C, ell)
                 tasks.append((params, id))
 
     # common_params = ' --train_file ../data/20news.train --test_file ../data/20news.test --eval_every 10 --num_iter 100 --alpha_sum 50'

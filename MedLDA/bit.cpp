@@ -24,6 +24,20 @@ void BIT::Update(int k, float delta)
     } while (k <= N);
 }
 
+void BIT::Build(float *data, int K) {
+    for (int i = 0; i < K; i++)
+        a[i+1] = data[i];
+
+    for (int i = 1; i <= N; i++) {
+        int j = i - 1;
+        int child = 1;
+        while ((j & child) == child) {
+            a[i] += a[i - child];
+            child *= 2;
+        }
+    }
+}
+
 int BIT::GetIndex(float val)
 {
     int pos = 0;

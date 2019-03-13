@@ -3,20 +3,23 @@ matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 import numpy as np
 from utils import *
+import sys
 
 if __name__ == '__main__':
-    all_data=[#('20news', '20NewsGroups', False),
-              # ('rcv1', 'RCV1', True),
-              # ('wiki', 'Wiki', True),
-              ('rcv1_small', 'RCV1(Small)', True),
-              ('wiki_small', 'Wiki(Small)', True),]
-    algs = [('none', 'None', 'k:'),
-            ('fs', '+FS', 'k:x'),
-            ('fsfs', '+FSFS', 'k--.'),
-            ('fsfsfc', 'This', 'k-')]
+    all_data=[('20news', '20NewsGroups', False, 20, 11269),
+              ('rcv1', 'RCV1', True, 103, 790000),
+              ('wiki', 'Wiki', True, 20, 1100000),
+              ('rcv1_small', 'RCV1(Small)', True, 103, 20000),
+              ('wiki_small', 'Wiki(Small)', True, 20, 20000),]
+    algs = [('none', 'Baseline', 'k:'),
+            ('fs', 'Reject', 'k:x'),
+            ('fsfs', 'Reject\niSVM=3', 'k--.'),
+            ('fsfsfc', 'Fast', 'k-')]
 
-    for data, data_name, multi_label in all_data:
-        fig, ax = plt.subplots(figsize=(4.2, 4.2))
+    for data, data_name, multi_label, L, D in all_data:
+        sys.stdout.write(data_name)
+        fig = plt.figure(figsize=(3, 3))
+        ax = fig.add_axes([0.18, 0.18, 0.75, 0.75])
         for alg, name, style in algs:
             log_file = '../logs/comparison/{}_{}.log'.format(data, alg)
             log = read_log(log_file)
@@ -24,8 +27,16 @@ if __name__ == '__main__':
             total_time = 0
             times = []
             accs = []
+            total_isvm = 0
+            total_lsv = 0
+            total_kd = 0
+            total_klambda = 0
             for iter in range(0, 20):
                 total_time += log[iter]['svmTime'] + log[iter]['ldaTime'] + log[iter]['classTime']
+                total_isvm += float(log[iter]["nSVMIteres"]) / L
+                total_lsv += float(log[iter]["nSV"]) / D
+                total_kd += float(log[iter]["cdk_nnz"]) / D
+                total_klambda += float(log[iter]["doc_prob_nnz"]) / D
                 if iter % 1 == 0:
                     if multi_label:
                         acc = log[iter]['testing_macro_f1']
@@ -34,17 +45,24 @@ if __name__ == '__main__':
                     times.append(total_time)
                     accs.append(acc)
 
+            if alg == 'none':
+                sys.stdout.write(" & {:.0f}".format(total_isvm / 20))
+            elif alg == 'fsfsfc':
+                sys.stdout.write(" & {:.0f} & {:.0f} & {:.0f} \\\\\n".format(total_kd / 20, total_klambda / 20, total_lsv / 20))
             ax.plot(times, accs, style, label=name)
 
         ax.set_xlabel('Time (s)')
-        ax.set_ylabel('Testing accuracy')
+        if multi_label:
+            ax.set_ylabel('Testing macro F1')
+        else:
+            ax.set_ylabel('Testing accuracy')
         ax.set_title(data_name)
         plt.legend()
         fig.savefig('comparison_{}.pdf'.format(data))
 
 
-        fig, ax = plt.subplots(figsize=(4.2, 4.2))
-
+        fig = plt.figure(figsize=(3, 3))
+        ax = fig.add_axes([0.19, 0.17, 0.75, 0.75])
         class_times = []
         svm_times = []
         lda_times = []
@@ -64,7 +82,7 @@ if __name__ == '__main__':
             class_times.append(class_time / 20)
             svm_times.append(svm_time / 20)
             lda_times.append(lda_time / 20)
-            print(data, alg, class_time, svm_time, lda_time)
+            # print(data, alg, class_time, svm_time, lda_time)
 
         class_times = np.array(class_times)
         svm_times = np.array(svm_times)
@@ -73,9 +91,9 @@ if __name__ == '__main__':
         ind = np.arange(N)
         width = 0.5
 
-        ax.bar(ind, lda_times, width, label='lda', fill=False, hatch='//')
-        ax.bar(ind, svm_times, width, bottom=lda_times, label='svm', fill=False)
-        ax.bar(ind, class_times, width, bottom=lda_times+svm_times, label='class', fill=False, hatch='\\')
+        ax.bar(ind, lda_times, width, label='Sampling', fill=False, hatch='//')
+        ax.bar(ind, svm_times, width, bottom=lda_times, label='Classifier', fill=False)
+        ax.bar(ind, class_times, width, bottom=lda_times+svm_times, label='Precomputing', fill=False, hatch='\\')
 
         ax.set_ylabel('Time (s)')
         ax.set_title(data_name)

@@ -140,10 +140,10 @@ void MedLDA::SampleWord(int w)
     //float phi_sum = 0;
     BIT bit;
     bit.Resize(K);
-    for (int k = 0; k < K; k++) {
-        phi[k] = (cw[k] + beta) / (ck[k] + beta * corpus.V);
-        bit.Update(k, phi[k]);
-    }
+    for (int k = 0; k < K; k++)
+        phi[k] = (cw[k] + beta) * inv_ck[k];
+
+    bit.Build(phi.data(), K);
 
     std::vector<float> prob_1(K), prob_2(K);
     corpus.ForWord(w, [&](int d, int &z) {
@@ -156,11 +156,13 @@ void MedLDA::SampleWord(int w)
         --cw[z];
         --ck[z];
         float old_phi = phi[z];
-        float new_phi = (cw[z] + beta) / (ck[z] + beta * corpus.V);
+        inv_ck[z] = 1.0 / (ck[z] + beta * corpus.V);
+        float new_phi = (cw[z] + beta) * inv_ck[z];
         bit.Update(z, new_phi - old_phi);
         phi[z] = new_phi;
+        avg_cdk += s_cd.Size() + dph.Size();
 
-        int k;
+        int k = z;
         while (1) {
             float sum_1 = 0;
             float sum_2 = 0;
@@ -216,7 +218,8 @@ void MedLDA::SampleWord(int w)
         ++cw[z];
         ++ck[z];
         old_phi = phi[z];
-        new_phi = (cw[z] + beta) / (ck[z] + beta * corpus.V);
+        inv_ck[z] = 1.0 / (ck[z] + beta * corpus.V);
+        new_phi = (cw[z] + beta) * inv_ck[z];
         bit.Update(z, new_phi - old_phi);
         phi[z] = new_phi;
     });
@@ -283,6 +286,7 @@ void MedLDA::SolveSVM()
 void MedLDA::Train()
 {
     for (int iter = 0; iter < FLAGS_num_iters; iter++) {
+        global_iter = iter;
         classTime = ldaTime = cdk_nnz = 0;
         num_1 = num_2 = num_3 = 0;
 
@@ -292,6 +296,7 @@ void MedLDA::Train()
 
         ComputeDocProb();
         num_reject = 0;
+        avg_cdk = 0;
         if (!FLAGS_fast_sampling) {
             for (int d = 0; d < corpus.num_docs; d++)
                 SampleDoc(d);
@@ -305,7 +310,8 @@ void MedLDA::Train()
         }
 
         ComputePhi();
-        double perplexity = Perplexity();
+//        double perplexity = Perplexity();
+        double perplexity = 0;
         cout << "{";
         OutputField("iteration", iter);
         OutputField("perplexity", perplexity);
@@ -314,6 +320,7 @@ void MedLDA::Train()
         OutputField("nReject", num_reject);
         OutputField("doc_prob_nnz", doc_prob_nnz);
         OutputField("cdk_nnz", cdk_nnz);
+        OutputField("avg_cdk", avg_cdk / corpus.T);
         OutputField("reject_rate", (double)num_reject / corpus.T);
         OutputField("sparse_rate", (double)doc_prob_nnz / corpus.num_docs / K);
         OutputField("cdk_sparse_rate", (double)cdk_nnz / corpus.num_docs / K);
